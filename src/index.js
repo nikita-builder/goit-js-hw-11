@@ -1,67 +1,101 @@
-import './css/styles.css';
-import debounce from 'lodash.debounce';
-import Notiflix from 'notiflix';
-import { fetchCountries } from './js/fetch'
+import Notiflix from "notiflix";
+import SimpleLightbox from "simplelightbox";
+import "simplelightbox/dist/simple-lightbox.min.css";
+import { fetchArticles } from './js/components/pixabay'
+import { createCards } from './js/components/photo_card';
 
+const searchText = document.querySelector('input');
+const searchButton = document.querySelector('button');
+const searchForm = document.querySelector('.search-form');
+const loadMoreButton = document.querySelector('.load-more');
+const gallery = document.querySelector('.gallery');
+const title = document.querySelector('.counter');
 
-const DEBOUNCE_DELAY = 300;
+let query = '';
+let totalHits = 0;
+let page = 1;
+const perPage = 40;
 
-const countryList = document.querySelector(".country-list");
-const form = document.querySelector("#search-box");
-const countryInfo = document.querySelector('.country-info');
+searchForm.addEventListener('submit', onSearch);
+loadMoreButton.addEventListener('click', onLoadMore);
 
-
-form.addEventListener("input", debounce(onFormInput, DEBOUNCE_DELAY));
-
-function onFormInput () {
-    const name = form.value.trim(); 
-    if (name === '') {
-        return (countryList.innerHTML = ''), (countryInfo.innerHTML = '');
-    } 
-fetchCountries(name)
-.then(countries => {
-    countryList.innerHTML = ""
-    countryInfo.innerHTML = ""
-    if (countries.length === 1) {
-        countryList.insertAdjacentHTML('beforeend', createCountryList(countries))
-        countryInfo.insertAdjacentHTML('beforeend', createCountryInfo(countries))
-    } else if (countries.length >= 10) {
-      alertTooManyMatches()
-    } else {
-        countryList.insertAdjacentHTML('beforeend', createCountryList(countries))
+function onSearch(e) {
+e.preventDefault();  
+page = 1;
+query = e.currentTarget.searchQuery.value.trim();
+clearFormGallery();
+loadMoreButton.classList.add('is-hidden')
+if (query === '') {
+noInfoForSearch();
+return;
     }
-  })
-  .catch(alertWrongName)
+
+fetchArticles(query, page, perPage)
+.then (({data}) => {
+if (data.totalHits === 0) {
+alertNoContentFound()
+} 
+else {
+createCards(data.hits);
+const lightbox = new SimpleLightbox(".gallery a", 
+{
+captionDelay:250,
+}).refresh();
+addTotalInfoCounter(data) 
+
+
+if (data.totalHits > perPage) {
+loadMoreButton.classList.remove('is-hidden')
+}
+} 
+})
+.catch(error => console.log(error))
 }
 
 
-function createCountryList(countries) {
-    const result = countries
-      .map(({ name, flags }) => {
-        return `<li>
-                <img src="${flags.svg}" alt="Flag of ${name.official}" width = 40px height = 40px>
-                <h2>${name.official}</h2>
-            </li>`
-      })
-      .join('')
-    return result
-  }
+function onLoadMore () {
+page += 1;
+fetchArticles(query, page, perPage).then(({data}) => {
+createCards(data.hits);
+const lightbox = new SimpleLightbox(".gallery a", 
+{
+captionDelay:250,
+}).refresh()
 
-  function createCountryInfo(countries) {
-    const result = countries
-      .map(({ capital, population, languages }) => {
-        return `<p><b>Capital: </b>${capital}</p>
-          <p><b>Population: </b>${population}</p>
-          <p><b>Languages: </b>${Object.values(languages).join(', ')}</p>`
-      })
-      .join('')
-    return result
-  }
+const totalPages = Math.ceil(data.totalHits / perPage)
 
-function alertWrongName() {
-    Notiflix.Notify.failure('Oops, there is no country with that name')
-  }
-  
-  function alertTooManyMatches() {
-    Notiflix.Notify.info('Too many matches found. Please enter a more specific name.')
-  }
+if (page > totalPages) {
+loadMoreButton.classList.add('is-hidden')
+endOfContent()
+}
+})
+.catch(error => console.log(error))
+}
+
+
+function clearFormGallery() {
+gallery.innerHTML = '';
+}
+
+
+//Notiflix
+
+
+function addTotalInfoCounter (data) {
+Notiflix.Notify.success(`Hooray! We found ${data.totalHits} images.`);
+}
+
+
+function noInfoForSearch () {
+Notiflix.Notify.failure('Please specify your search query.')
+}
+
+
+function endOfContent () {
+Notiflix.Notify.warning("We're sorry, but you've reached the end of search results.")
+}
+
+
+function alertNoContentFound () {
+Notiflix.Notify.failure('Sorry, there are no images matching your search query. Please try again.')
+}
